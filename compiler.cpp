@@ -10,6 +10,9 @@
 
 #define ROXOR_COMPILER_DEBUG 	0
 
+//#define DEBUG_PRINT_OUTER_STACK() compile_print_outer_stack(node, __FUNCTION__, __LINE__)
+#define DEBUG_PRINT_OUTER_STACK()
+
 #if !defined(DW_LANG_Ruby)
 # define DW_LANG_Ruby 0x15 // TODO: Python is 0x14, request a real number
 #endif
@@ -248,6 +251,9 @@ RoxorCompiler::RoxorCompiler(bool _debug_mode)
     setHasEnsureFunc = NULL;
     setScopeFunc = get_function("vm_set_current_scope");
     setCurrentClassFunc = NULL;
+    pushOuterFunc = NULL;
+    popOuterFunc = NULL;
+    printOuterStackFunc = NULL;
     debugTrapFunc = NULL;
     getFFStateFunc = NULL;
     setFFStateFunc = NULL;
@@ -2575,6 +2581,30 @@ RoxorCompiler::compile_set_current_class(Value *klass)
     return CallInst::Create(setCurrentClassFunc, klass, "", bb);
 }
 
+Value *
+RoxorCompiler::compile_push_outer(Value *klass)
+{
+    if (pushOuterFunc == NULL) {
+	// rb_vm_outer_t *rb_vm_push_outer(Class klass)
+	pushOuterFunc = cast<Function>(
+	    module->getOrInsertFunction("rb_vm_push_outer", PtrTy, RubyObjTy, NULL));
+    }
+    
+    return CallInst::Create(pushOuterFunc, klass, "", bb);
+}
+
+Value *
+RoxorCompiler::compile_pop_outer()
+{
+    if (popOuterFunc == NULL) {
+	// rb_vm_outer_t *rb_vm_pop_outer()
+	popOuterFunc = cast<Function>(
+	    module->getOrInsertFunction("rb_vm_pop_outer", PtrTy, NULL));
+    }
+    
+    return CallInst::Create(popOuterFunc, "", bb);
+}
+
 void
 RoxorCompiler::compile_set_current_scope(Value *klass, Value *scope)
 {
@@ -2591,6 +2621,30 @@ RoxorCompiler::compile_node_error(const char *msg, NODE *node)
     int t = nd_type(node);
     printf("%s: %d (%s)", msg, t, ruby_node_name(t));
     abort();
+}
+
+void
+RoxorCompiler::compile_print_outer_stack(NODE *node, const char *function, int line)
+{
+    if (printOuterStackFunc == NULL) {
+	// void rb_vm_print_outer_stack(const char *fname, NODE *node, const char *function, int line)
+	std::vector<const Type *> types;
+	types.push_back(PtrTy);
+	types.push_back(PtrTy);
+	types.push_back(PtrTy);
+	types.push_back(Int32Ty);
+	FunctionType *ft = FunctionType::get(VoidTy, types, false);
+	printOuterStackFunc = cast<Function>
+	    (module->getOrInsertFunction("rb_vm_print_outer_stack", ft));
+    }
+
+    std::vector<Value *> params;
+    params.push_back(compile_const_global_string(fname));
+    params.push_back(compile_const_pointer(node));
+    params.push_back(compile_const_global_string(function));
+    params.push_back(ConstantInt::get(Int32Ty, line));
+    
+    CallInst::Create(printOuterStackFunc, params.begin(), params.end(), "", bb);
 }
 
 void
@@ -3966,6 +4020,9 @@ RoxorCompiler::compile_node0(NODE *node)
 			bool old_current_block_chain = current_block_chain;
 			bool old_dynamic_class = dynamic_class;
 
+			compile_push_outer(classVal);
+			DEBUG_PRINT_OUTER_STACK();
+
 			current_block_chain = false;
 			dynamic_class = false;
 
@@ -4005,6 +4062,9 @@ RoxorCompiler::compile_node0(NODE *node)
 			params.push_back(compile_const_pointer(NULL));
 			val = compile_protected_call(f, params);
 
+			compile_pop_outer();
+			DEBUG_PRINT_OUTER_STACK();
+			
 			dynamic_class = old_dynamic_class;
 			compile_set_current_scope(classVal, defaultScope);
 

@@ -498,6 +498,9 @@ void rb_vm_set_abort_on_exception(bool flag);
 Class rb_vm_set_current_class(Class klass);
 Class rb_vm_get_current_class(void);
 
+rb_vm_outer_t *rb_vm_push_outer(Class klass);
+rb_vm_outer_t *rb_vm_pop_outer(void);
+
 bool rb_vm_aot_feature_load(const char *name);
 
 bool rb_vm_generate_objc_class_name(const char *name, char *buf,
@@ -1063,6 +1066,7 @@ class RoxorVM {
 	std::vector<rb_vm_binding_t *> bindings;
 	std::map<VALUE, int *> catch_nesting;
 	std::vector<VALUE> recursive_objects;
+        rb_vm_outer_t *outer_stack;
 
 	// Method cache.
 	struct mcache *mcache;
@@ -1114,6 +1118,7 @@ class RoxorVM {
 	READER(mcache, struct mcache *);
 	ACCESSOR(current_mri_method_self, VALUE);
 	ACCESSOR(current_mri_method_sel, SEL);
+	READER(outer_stack, rb_vm_outer_t *);
 
 	void debug_blocks(void);
 
@@ -1212,6 +1217,9 @@ class RoxorVM {
 
 	VALUE exec_recursive(VALUE (*func) (VALUE, VALUE, int), VALUE obj,
 		VALUE arg);
+
+        rb_vm_outer_t *push_outer(Class klass);
+        rb_vm_outer_t *pop_outer(void);
 };
 
 #define GET_VM() (RoxorVM::current())

@@ -396,6 +396,7 @@ RoxorVM::RoxorVM(void)
 {
     current_top_object = Qnil;
     current_class = NULL;
+    outer_stack = NULL;
     safe_level = 0;
     backref = Qnil;
     broken_with = Qundef;
@@ -3028,6 +3029,69 @@ rb_vm_add_binding_lvar_use(rb_vm_binding_t *binding, rb_vm_block_t *block,
 		VM_LVAR_USE_TYPE_BINDING);
     }
     rb_vm_add_lvar_use(parent_var_uses, binding, VM_LVAR_USE_TYPE_BINDING);
+}
+
+extern "C" const char *ruby_node_name(int node);
+
+extern "C"
+void
+rb_vm_print_outer_stack(const char *fname, NODE *node, const char *function, int line)
+{
+    if (fname != NULL) {
+	printf("%s", fname);
+    }
+    if (node != NULL) {
+	printf("%ld:%s", nd_line(node), ruby_node_name(nd_type(node)));
+    }
+    printf("%s:%d:outer_stack(", function, line);
+    
+    bool first = true;
+    for (rb_vm_outer_t *o = GET_VM()->get_outer_stack(); o != NULL; o = o->outer) {
+	if (first) {
+	    first = false;
+	}
+	else {
+	    printf(" > ");
+	}
+	printf("%s", class_getName(o->klass));
+    }
+    printf(")\n");
+}
+
+rb_vm_outer_t *
+RoxorVM::push_outer(Class klass)
+{
+    rb_vm_outer_t *o = (rb_vm_outer_t *)malloc(sizeof(rb_vm_outer_t));
+    o->klass = klass;
+    o->outer = outer_stack;
+    outer_stack = o;
+    
+    return o;
+}
+
+rb_vm_outer_t *
+RoxorVM::pop_outer(void)
+{
+    assert(outer_stack != NULL);
+    rb_vm_outer_t *o = outer_stack;
+    // KOUJI_TODO: collect garbage. but not all, only unused.
+    outer_stack = outer_stack->outer;
+    
+    return o;
+}
+
+rb_vm_outer_t *
+rb_vm_push_outer(Class klass)
+{
+    RoxorVM *vm = GET_VM();
+    return vm->push_outer(klass);
+}
+
+rb_vm_outer_t *
+rb_vm_pop_outer(void)
+{
+    RoxorVM *vm = GET_VM();
+    return vm->pop_outer();
 }
 
 struct rb_vm_kept_local {

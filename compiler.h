@@ -233,6 +233,9 @@ class RoxorCompiler {
 	Function *setHasEnsureFunc;
 	Function *setScopeFunc;
 	Function *setCurrentClassFunc;
+        Function *pushOuterFunc;
+        Function *popOuterFunc;
+        Function *printOuterStackFunc;
 	Function *debugTrapFunc;
 	Function *getFFStateFunc;
 	Function *setFFStateFunc;
@@ -420,6 +423,8 @@ class RoxorCompiler {
 
 	void compile_set_current_scope(Value *klass, Value *scope);
 	Value *compile_set_current_class(Value *klass);
+	Value *compile_push_outer(Value *klass);
+	Value *compile_pop_outer(void);
 
 	Value *compile_landing_pad_header(void);
 	void compile_landing_pad_footer(bool pop_exception=true);
@@ -450,6 +455,7 @@ class RoxorCompiler {
 	void compile_debug_trap(void);
 
 	virtual Value *compile_slot_cache(ID id);
+        void compile_print_outer_stack(NODE *node, const char *function, int line);
 	void compile_keep_vars(BasicBlock *startBB, BasicBlock *mergeBB);
 
 	SEL mid_to_sel(ID mid, int arity);
